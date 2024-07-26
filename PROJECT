@@ -17,6 +17,7 @@ resources:
   controller: true
   domain: cloud.io
   group: cache
-  kind: Memcached
+  kind: MemcachedProxy
   path: github.com/cloud/memcached-operator/api/v1alpha1
   version: v1alpha1
+version: "3"

@@ -5,9 +5,9 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
-  - apps
+  - cache.cloud.io
   resources:
-  - deployments
+  - memcachedproxies
   verbs:
   - create
   - delete
@@ -19,34 +19,14 @@ rules:
 - apiGroups:
   - cache.cloud.io
   resources:
-  - memcacheds
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cache.cloud.io
-  resources:
-  - memcacheds/finalizers
+  - memcachedproxies/finalizers
   verbs:
   - update
 - apiGroups:
   - cache.cloud.io
   resources:
-  - memcacheds/status
+  - memcachedproxies/status
   verbs:
   - get
   - patch
   - update
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list
-  - watch

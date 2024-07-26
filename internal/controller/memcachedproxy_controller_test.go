@@ -30,7 +30,7 @@ import (
 	cachev1alpha1 "github.com/cloud/memcached-operator/api/v1alpha1"
 )
 
-var _ = Describe("Memcached Controller", func() {
+var _ = Describe("MemcachedProxy Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
 
@@ -40,13 +40,13 @@ var _ = Describe("Memcached Controller", func() {
 			Name:      resourceName,
 			Namespace: "default", // TODO(user):Modify as needed
 		}
-		memcached := &cachev1alpha1.Memcached{}
+		memcachedproxy := &cachev1alpha1.MemcachedProxy{}
 
 		BeforeEach(func() {
-			By("creating the custom resource for the Kind Memcached")
-			err := k8sClient.Get(ctx, typeNamespacedName, memcached)
+			By("creating the custom resource for the Kind MemcachedProxy")
+			err := k8sClient.Get(ctx, typeNamespacedName, memcachedproxy)
 			if err != nil && errors.IsNotFound(err) {
-				resource := &cachev1alpha1.Memcached{
+				resource := &cachev1alpha1.MemcachedProxy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
 						Namespace: "default",
@@ -59,16 +59,16 @@ var _ = Describe("Memcached Controller", func() {
 
 		AfterEach(func() {
 			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &cachev1alpha1.Memcached{}
+			resource := &cachev1alpha1.MemcachedProxy{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
 
-			By("Cleanup the specific resource instance Memcached")
+			By("Cleanup the specific resource instance MemcachedProxy")
 			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
 		})
 		It("should successfully reconcile the resource", func() {
 			By("Reconciling the created resource")
-			controllerReconciler := &MemcachedReconciler{
+			controllerReconciler := &MemcachedProxyReconciler{
 				Client: k8sClient,
 				Scheme: k8sClient.Scheme(),
 			}

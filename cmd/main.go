@@ -122,11 +122,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.MemcachedReconciler{
+	if err = (&controller.MemcachedProxyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "Memcached")
+		setupLog.Error(err, "unable to create controller", "controller", "MemcachedProxy")
 		os.Exit(1)
 	}
 	//+kubebuilder:scaffold:builder

@@ -1,0 +1,12 @@
+apiVersion: cache.cloud.io/v1alpha1
+kind: MemcachedProxy
+metadata:
+  labels:
+    app.kubernetes.io/name: memcachedproxy
+    app.kubernetes.io/instance: memcachedproxy-sample
+    app.kubernetes.io/part-of: memcached-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: memcached-operator
+  name: memcachedproxy-sample
+spec:
+  # TODO(user): Add fields here
