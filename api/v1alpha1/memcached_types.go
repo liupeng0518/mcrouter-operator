@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -28,14 +29,31 @@ type MemcachedSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// Foo is an example field of Memcached. Edit memcached_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Memcached config
+	MemcachedPoolsize int32 `json:"memcached_pool_size"`
+	//Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	MmecachedPort int32 `json:"memcached_port,omitempty"`
+	// Image URL for the Memcached container
+	MmecachedImage string `json:"memcached_image,omitempty"`
+	// Configuration file parameters
+	ConfigParams map[string]string `json:"configParams,omitempty"`
+	// Toleration policies
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+	// Taint policies
+	Taints []corev1.Taint `json:"taints,omitempty"`
+
+	// Mcrouter config
+	PoolSetup     string `json:"pool_setup,omitempty"`
+	McrouterImage string `json:"mcrouter_image,omitempty"`
+	McrouterPort  int32  `json:"mcrouter_port,omitempty"`
+	McrouterSize  int32  `json:"mcrouter_size"`
 }
 
 // MemcachedStatus defines the observed state of Memcached
 type MemcachedStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+	Nodes []string `json:"nodes"`
 }
 
 //+kubebuilder:object:root=true
