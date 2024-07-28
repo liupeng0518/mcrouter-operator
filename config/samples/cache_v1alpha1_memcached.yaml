@@ -9,4 +9,9 @@ metadata:
     app.kubernetes.io/created-by: memcached-operator
   name: memcached-sample
 spec:
-  # TODO(user): Add fields here
+  # of Pods/Instances your Operand must have on cluster
+  size: 3
+
+  containerPort: 11211
+
+  image: memcached:1.4.36-alpine
