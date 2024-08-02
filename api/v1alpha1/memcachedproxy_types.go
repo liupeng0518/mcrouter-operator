@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -41,6 +42,15 @@ type MemcachedProxySpec struct {
 	// Port defines the port that will be used to init the container with the image
 	// +operator-sdk:csv:customresourcedefinitions:type=spec
 	ContainerPort int32 `json:"containerPort,omitempty"`
+
+	Image string `json:"image,omitempty"`
+
+	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	PoolSetup string `json:"poolSetup,omitempty"`
+
+	// 指定 memcached sts 获取对应 svc 的 pod.svc address 解析
+	MemcachedSts string `json:"memcachedSts,omitempty"`
 }
 
 // MemcachedProxyStatus defines the observed state of MemcachedProxy

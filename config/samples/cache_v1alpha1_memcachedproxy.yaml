@@ -9,4 +9,9 @@ metadata:
     app.kubernetes.io/created-by: memcached-operator
   name: memcachedproxy-sample
 spec:
-  # TODO(user): Add fields here
+  size: 3
+
+  containerPort: 5000
+  poolSetup: sharded
+  image: liupeng0518/mcrouter:0.41.0.20240122-2
+  memcachedSts: memcached-sample

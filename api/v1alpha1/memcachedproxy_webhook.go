@@ -18,6 +18,7 @@ package v1alpha1
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -44,7 +45,9 @@ var _ webhook.Defaulter = &MemcachedProxy{}
 func (r *MemcachedProxy) Default() {
 	memcachedproxylog.Info("default", "name", r.Name)
 
-	// TODO(user): fill in your defaulting logic.
+	if r.Spec.Size == 0 {
+		r.Spec.Size = 3
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
@@ -56,22 +59,19 @@ var _ webhook.Validator = &MemcachedProxy{}
 func (r *MemcachedProxy) ValidateCreate() (admission.Warnings, error) {
 	memcachedproxylog.Info("validate create", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object creation.
-	return nil, nil
+	return nil, validateOdd(r.Spec.Size)
 }
 
 // ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
 func (r *MemcachedProxy) ValidateUpdate(old runtime.Object) (admission.Warnings, error) {
 	memcachedproxylog.Info("validate update", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object update.
-	return nil, nil
+	return nil, validateOdd(r.Spec.Size)
 }
 
 // ValidateDelete implements webhook.Validator so a webhook will be registered for the type
 func (r *MemcachedProxy) ValidateDelete() (admission.Warnings, error) {
 	memcachedproxylog.Info("validate delete", "name", r.Name)
 
-	// TODO(user): fill in your validation logic upon object deletion.
 	return nil, nil
 }

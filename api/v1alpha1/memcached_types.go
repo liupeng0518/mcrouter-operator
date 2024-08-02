@@ -62,6 +62,9 @@ type MemcachedStatus struct {
 	// Conditions store the status conditions of the Memcached instances
 	// +operator-sdk:csv:customresourcedefinitions:type=status
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
+
+	//Status of pods
+	//Nodes []string `json:"nodes"`
 }
 
 //+kubebuilder:object:root=true

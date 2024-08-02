@@ -17,8 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"errors"
-
 	"k8s.io/apimachinery/pkg/runtime"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,10 +74,4 @@ func (r *Memcached) ValidateDelete() (admission.Warnings, error) {
 	memcachedlog.Info("validate delete", "name", r.Name)
 
 	return nil, nil
-}
-func validateOdd(n int32) error {
-	if n%2 == 0 {
-		return errors.New("Cluster size must be an odd number")
-	}
-	return nil
 }

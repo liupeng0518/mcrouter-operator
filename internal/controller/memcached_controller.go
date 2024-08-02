@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"strings"
 	"time"
 
@@ -219,12 +220,6 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 				"StatefulSet.Namespace", dep.Namespace, "StatefulSet.Name", dep.Name)
 			return ctrl.Result{}, err
 		}
-		// create svc for memcached
-		svc, err := r.serviceForMemcached(memcached)
-		if err = r.Create(ctx, svc); err != nil {
-			log.Error(err, "Failed to create Service for Memcached")
-			return ctrl.Result{}, err
-		}
 
 		// StatefulSet created successfully
 		// We will requeue the reconciliation so that we can ensure the state
@@ -275,6 +270,39 @@ func (r *MemcachedReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{Requeue: true}, nil
 	}
 
+	// Check if the Service already exists, if not create a new one
+	// NOTE: The Service is used to expose the Deployment. However, the Service is not required at all for the memcached example to work. The purpose is to add more examples of what you can do in your operator project.
+	service := &corev1.Service{}
+	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: memcached.Name, Namespace: memcached.Namespace}, service)
+	if err != nil && apierrors.IsNotFound(err) {
+		// Define a new Service object
+		svc := r.serviceForMemcached(memcached, false, "None")
+		log.Info("Creating a new Service.", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+		err = r.Client.Create(context.TODO(), svc)
+		if err != nil {
+			log.Error(err, "Failed to create new Service.", "Service.Namespace", svc.Namespace, "Service.Name", svc.Name)
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get Service.")
+		return ctrl.Result{}, err
+	}
+
+	unreadyService := &corev1.Service{}
+	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: memcached.Name, Namespace: memcached.Namespace}, unreadyService)
+	if err != nil && apierrors.IsNotFound(err) {
+		// Define a new Service object
+		usvc := r.serviceForMemcached(memcached, true, "False")
+		log.Info("Creating a new Service.", "Service.Namespace", usvc.Namespace, "Service.Name", usvc.Name)
+		err = r.Client.Create(context.TODO(), usvc)
+		if err != nil {
+			log.Error(err, "Failed to create new Service.", "Service.Namespace", usvc.Namespace, "Service.Name", usvc.Name)
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get Service.")
+		return ctrl.Result{}, err
+	}
 	// The following implementation will update the status
 	meta.SetStatusCondition(&memcached.Status.Conditions, metav1.Condition{Type: typeAvailableMemcached,
 		Status: metav1.ConditionTrue, Reason: "Reconciling",
@@ -320,16 +348,34 @@ func (r *MemcachedReconciler) statefulsetForMemcached(
 		return nil, err
 	}
 
+	// 定义 VolumeClaimTemplate
+	volumeClaimTemplate := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "data-volume",
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse("5Gi"),
+				},
+			},
+		},
+	}
+
 	dep := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      memcached.Name,
 			Namespace: memcached.Namespace,
 		},
+
 		Spec: appsv1.StatefulSetSpec{
-			Replicas: &replicas,
+			PodManagementPolicy: "Parallel",
+			Replicas:            &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: ls,
 			},
+			ServiceName: memcached.Name,
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: ls,
@@ -397,9 +443,16 @@ func (r *MemcachedReconciler) statefulsetForMemcached(
 							Name:          "memcached",
 						}},
 						Command: []string{"memcached", "-m=64", "-o", "modern", "-v"},
+						VolumeMounts: []corev1.VolumeMount{
+							{
+								Name:      "data-volume",
+								MountPath: "/data",
+							},
+						},
 					}},
 				},
 			},
+			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{volumeClaimTemplate},
 		},
 	}
 
@@ -436,24 +489,53 @@ func imageForMemcached(memcached *cachev1alpha1.Memcached) (string, error) {
 }
 
 // serviceForMemcached 创建与 Memcached 关联的 Service
-func (r *MemcachedReconciler) serviceForMemcached(memcached *cachev1alpha1.Memcached) (*corev1.Service, error) {
+func (r *MemcachedReconciler) serviceForMemcached(memcached *cachev1alpha1.Memcached, publishNotReadyAddresses bool, clusterIP string) *corev1.Service {
+
 	// 定义 Service 的配置
-	svc := &corev1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      memcached.Name,
-			Namespace: memcached.Namespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: labelsForMemcached(memcached, memcached.Name),
-			Ports: []corev1.ServicePort{
-				{
-					Port:     memcached.Spec.ContainerPort,
-					Protocol: corev1.ProtocolTCP,
+	if clusterIP == "None" {
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      memcached.Name,
+				Namespace: memcached.Namespace,
+			},
+			Spec: corev1.ServiceSpec{
+				Selector:  labelsForMemcached(memcached, memcached.Name),
+				ClusterIP: "None",
+				Ports: []corev1.ServicePort{
+					{
+						Port:     memcached.Spec.ContainerPort,
+						Protocol: corev1.ProtocolTCP,
+						Name:     memcached.Name,
+					},
 				},
 			},
-		},
+		}
+		// Set Memcached instance as the owner of the Service.
+		ctrl.SetControllerReference(memcached, svc, r.Scheme) //todo check how to get the schema
+		return svc
+	} else {
+		svc := &corev1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      memcached.Name + "-unready",
+				Namespace: memcached.Namespace,
+			},
+			Spec: corev1.ServiceSpec{
+				PublishNotReadyAddresses: publishNotReadyAddresses,
+				Selector:                 labelsForMemcached(memcached, memcached.Name),
+				Ports: []corev1.ServicePort{
+					{
+						Port:     memcached.Spec.ContainerPort,
+						Protocol: corev1.ProtocolTCP,
+						Name:     memcached.Name,
+					},
+				},
+			},
+		}
+		// Set Memcached instance as the owner of the Service.
+		ctrl.SetControllerReference(memcached, svc, r.Scheme) //todo check how to get the schema
+		return svc
 	}
-	return svc, nil
+
 }
 
 // SetupWithManager sets up the controller with the Manager.

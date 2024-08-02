@@ -7,6 +7,18 @@ rules:
 - apiGroups:
   - apps
   resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps
+  resources:
   - statefulsets
   verbs:
   - create
@@ -16,32 +28,6 @@ rules:
   - patch
   - update
   - watch
-- apiGroups:
-  - cache.cloud.io
-  resources:
-  - memcachedproxies
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - cache.cloud.io
-  resources:
-  - memcachedproxies/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - cache.cloud.io
-  resources:
-  - memcachedproxies/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - cache.example.com
   resources:
