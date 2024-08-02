@@ -2,7 +2,7 @@ name: Release container images
 
 on:
   push:
-    branches: [master]
+    branches: [main]
 
 env:
   ApplicationName: mcrouter-operator
