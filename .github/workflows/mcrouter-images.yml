@@ -1,0 +1,40 @@
+name: Release mccouter container images
+
+on:
+  push:
+    branches: [main]
+
+env:
+  ApplicationName: mcrouter-operator
+  QuayImageName: liupeng0518/mcrouter-operator
+  AppVersion: "0.41.0.20240122-2"
+  DOCKERFILE_PATH: './Dockerfile-mcrouter'
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Login to docker.io
+        uses: docker/login-action@v2
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWD }}
+
+      - name: Build and push multi-arch latest image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ${{ env.DOCKERFILE_PATH }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.QuayImageName }}:${{ env.AppVersion }}, ${{ env.QuayImageName }}:latest
