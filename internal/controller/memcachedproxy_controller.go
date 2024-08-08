@@ -432,7 +432,7 @@ func getMemcachedPodName(memcachedproxy *cachev1alpha1.MemcachedProxy) string {
 
 	// 提取服务名称
 	serviceName, _, err := unstructured.NestedString(sts.Object, "spec", "serviceName")
-	unreadyServiceName := serviceName + "-unready"
+	//unreadyServiceName := serviceName + "-unready"
 	if err != nil {
 		log.Log.Info("failed to get replicas: %v", err)
 	}
@@ -444,7 +444,7 @@ func getMemcachedPodName(memcachedproxy *cachev1alpha1.MemcachedProxy) string {
 	memcachedPort := strconv.Itoa(11211)
 	for i := 0; i < int(replicas); i++ {
 		podName := string(serviceName) + "-" + strconv.Itoa(i)
-		domain := fmt.Sprintf("\"%s.%s:%s\"", podName, unreadyServiceName, memcachedPort)
+		domain := fmt.Sprintf("\"%s.%s:%s\"", podName, serviceName, memcachedPort)
 		domains = append(domains, domain)
 	}
 	result := fmt.Sprint(strings.Join(domains, ","))
