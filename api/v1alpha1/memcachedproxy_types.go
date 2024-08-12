@@ -45,12 +45,25 @@ type MemcachedProxySpec struct {
 
 	Image string `json:"image,omitempty"`
 
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:default:={limits: {cpu: "2000m", memory: "2Gi"}, requests: {cpu: "100m", memory: "200Mi"}}
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Affinity scheduling rules to be applied on created Pods.
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Tolerations is the list of Toleration resources attached to each Pod in the RabbitmqCluster.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
 	PoolSetup string `json:"poolSetup,omitempty"`
 
 	// 指定 memcached sts 获取对应 svc 的 pod.svc address 解析
 	MemcachedSts string `json:"memcachedSts,omitempty"`
+
+	// List of environment variables to set in the container.
+	// This field cannot be updated.
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	Labels map[string]string `json:"labels,omitempty"`
 }
 
 // MemcachedProxyStatus defines the observed state of MemcachedProxy

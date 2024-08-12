@@ -38,3 +38,15 @@ func generateK8sConfig() (*rest.Config, error) {
 	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
 	return kubeConfig.ClientConfig()
 }
+
+// mergeLabels 函数用于合并两个标签映射
+func mergeLabels(customLabels, generatedLabels map[string]string) map[string]string {
+	result := make(map[string]string)
+	for key, value := range customLabels {
+		result[key] = value
+	}
+	for key, value := range generatedLabels {
+		result[key] = value
+	}
+	return result
+}

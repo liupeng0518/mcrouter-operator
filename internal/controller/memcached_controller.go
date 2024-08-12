@@ -19,7 +19,6 @@ package controller
 import (
 	"context"
 	"fmt"
-	"k8s.io/apimachinery/pkg/api/resource"
 	"strings"
 	"time"
 
@@ -39,7 +38,7 @@ import (
 	cachev1alpha1 "github.com/cloud/memcached-operator/api/v1alpha1"
 )
 
-const memcachedFinalizer = "cache.example.com/finalizer"
+const memcachedFinalizer = "cache.cloud.io/finalizer"
 
 // Definitions to manage status conditions
 const (
@@ -60,9 +59,9 @@ type MemcachedReconciler struct {
 // when the command <make manifests> is executed.
 // To know more about markers see: https://book.kubebuilder.io/reference/markers.html
 
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds/finalizers,verbs=update
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
@@ -339,8 +338,9 @@ func (r *MemcachedReconciler) doFinalizerOperationsForMemcached(cr *cachev1alpha
 // statefulsetForMemcached returns a Memcached StatefulSet object
 func (r *MemcachedReconciler) statefulsetForMemcached(
 	memcached *cachev1alpha1.Memcached) (*appsv1.StatefulSet, error) {
-	ls := labelsForMemcached(memcached, memcached.Name)
+	ls := mergeLabels(labelsForMemcached(memcached, memcached.Name), memcached.Spec.Labels)
 	replicas := memcached.Spec.Size
+	metricsEnabled := memcached.Spec.MetricsEnabled
 
 	// Get the Operand image
 	image, err := imageForMemcached(memcached)
@@ -348,28 +348,16 @@ func (r *MemcachedReconciler) statefulsetForMemcached(
 		return nil, err
 	}
 
-	// 定义 VolumeClaimTemplate
-	volumeClaimTemplate := corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "data-volume",
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.ResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse("5Gi"),
-				},
-			},
-		},
-	}
-
 	dep := &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      memcached.Name,
-			Namespace: memcached.Namespace,
+			Name:        memcached.Name,
+			Namespace:   memcached.Namespace,
+			Labels:      ls,
+			Annotations: memcached.Spec.Annotations,
 		},
 
 		Spec: appsv1.StatefulSetSpec{
+
 			PodManagementPolicy: "Parallel",
 			Replicas:            &replicas,
 			Selector: &metav1.LabelSelector{
@@ -381,83 +369,81 @@ func (r *MemcachedReconciler) statefulsetForMemcached(
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					Affinity: &corev1.Affinity{
-						NodeAffinity: &corev1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-								NodeSelectorTerms: []corev1.NodeSelectorTerm{
-									{
-										MatchExpressions: []corev1.NodeSelectorRequirement{
-											{
-												Key:      "kubernetes.io/arch",
-												Operator: "In",
-												Values:   []string{"amd64", "arm64", "ppc64le", "s390x"},
-											},
-											{
-												Key:      "kubernetes.io/os",
-												Operator: "In",
-												Values:   []string{"linux"},
-											},
+					Affinity:    memcached.Spec.Affinity,
+					Tolerations: memcached.Spec.Tolerations,
+					Containers: func() []corev1.Container {
+						containers := []corev1.Container{
+							{
+								Resources: *memcached.Spec.Resources,
+								//需要优雅关闭
+								Lifecycle: &corev1.Lifecycle{
+									PreStop: &corev1.LifecycleHandler{
+										Exec: &corev1.ExecAction{
+											// "/bin/bash" "-ec" "/usr/bin/pkill -10 memcached" "sleep 60s"
+											Command: []string{"echo", "PreStop executed"},
 										},
 									},
 								},
+								Env:             memcached.Spec.Env,
+								Image:           image,
+								Name:            "memcached",
+								ImagePullPolicy: corev1.PullIfNotPresent,
+								Ports: []corev1.ContainerPort{{
+									ContainerPort: memcached.Spec.ContainerPort,
+									Name:          "memcached",
+								}},
+								Command: []string{"memcached", "-o", "modern", "--memory-file=/data/memory_file", "-v"},
+								VolumeMounts: func() []corev1.VolumeMount {
+									if memcached.Spec.Storage != nil {
+										return []corev1.VolumeMount{
+											{
+												Name:      "memcached-claim",
+												MountPath: "/data",
+											},
+										}
+									}
+									return nil
+								}(),
+								LivenessProbe:  memcached.Spec.LivenessProbe,
+								ReadinessProbe: memcached.Spec.ReadinessProbe,
 							},
-						},
-					},
-					SecurityContext: &corev1.PodSecurityContext{
-						RunAsNonRoot: &[]bool{true}[0],
-						// IMPORTANT: seccomProfile was introduced with Kubernetes 1.19
-						// If you are looking for to produce solutions to be supported
-						// on lower versions you must remove this option.
-						SeccompProfile: &corev1.SeccompProfile{
-							Type: corev1.SeccompProfileTypeRuntimeDefault,
-						},
-					},
-					Containers: []corev1.Container{{
-						Image:           image,
-						Name:            "memcached",
-						ImagePullPolicy: corev1.PullIfNotPresent,
-						// Ensure restrictive context for the container
-						// More info: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
-						SecurityContext: &corev1.SecurityContext{
-							// WARNING: Ensure that the image used defines an UserID in the Dockerfile
-							// otherwise the Pod will not run and will fail with "container has runAsNonRoot and image has non-numeric user"".
-							// If you want your workloads admitted in namespaces enforced with the restricted mode in OpenShift/OKD vendors
-							// then, you MUST ensure that the Dockerfile defines a User ID OR you MUST leave the "RunAsNonRoot" and
-							// "RunAsUser" fields empty.
-							RunAsNonRoot: &[]bool{true}[0],
-							// The memcached image does not use a non-zero numeric user as the default user.
-							// Due to RunAsNonRoot field being set to true, we need to force the user in the
-							// container to a non-zero numeric user. We do this using the RunAsUser field.
-							// However, if you are looking to provide solution for K8s vendors like OpenShift
-							// be aware that you cannot run under its restricted-v2 SCC if you set this value.
-							RunAsUser:                &[]int64{1001}[0],
-							AllowPrivilegeEscalation: &[]bool{false}[0],
-							Capabilities: &corev1.Capabilities{
-								Drop: []corev1.Capability{
-									"ALL",
-								},
-							},
-						},
-						Ports: []corev1.ContainerPort{{
-							ContainerPort: memcached.Spec.ContainerPort,
-							Name:          "memcached",
-						}},
-						Command: []string{"memcached", "-m=64", "-o", "modern", "-v"},
-						VolumeMounts: []corev1.VolumeMount{
-							{
-								Name:      "data-volume",
-								MountPath: "/data",
-							},
-						},
-					}},
+						}
+						if metricsEnabled {
+							containers = append(containers, corev1.Container{
+								Name:            "monitoring-exporter",
+								Image:           memcached.Spec.MetricsImage,
+								ImagePullPolicy: corev1.PullIfNotPresent,
+								Resources:       *memcached.Spec.MetricsResources,
+								LivenessProbe:   memcached.Spec.MetricsLivenessProbe,
+								ReadinessProbe:  memcached.Spec.MetricsReadinessProbe,
+								Ports: []corev1.ContainerPort{{
+									ContainerPort: 9150,
+									Name:          "metrics",
+								}},
+							})
+						}
+						return containers
+					}(),
 				},
 			},
-			VolumeClaimTemplates: []corev1.PersistentVolumeClaim{volumeClaimTemplate},
 		},
 	}
 
+	// 判断 storage 是否为空
+	if memcached.Spec.Storage == nil {
+		return dep, nil
+	}
+
+	volumeClaimTemplate := corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "memcached-claim",
+		},
+		Spec: memcached.Spec.Storage.VolumeClaimTemplate.Spec,
+	}
+
+	dep.Spec.VolumeClaimTemplates = []corev1.PersistentVolumeClaim{volumeClaimTemplate}
+
 	// Set the ownerRef for the StatefulSet
-	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/owners-dependents/
 	if err := ctrl.SetControllerReference(memcached, dep, r.Scheme); err != nil {
 		return nil, err
 	}

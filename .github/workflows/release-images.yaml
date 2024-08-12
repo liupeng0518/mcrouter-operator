@@ -5,8 +5,8 @@ on:
     branches: [main]
 
 env:
-  ApplicationName: mcrouter
-  QuayImageName: liupeng0518/mcrouter
+  ApplicationName: mcrouter-operator
+  QuayImageName: liupeng0518/mcrouter-operator
   AppVersion: "v0.1"
   DOCKERFILE_PATH: './Dockerfile'
 

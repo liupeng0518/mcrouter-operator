@@ -18,30 +18,30 @@ package controller
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"strconv"
-	"strings"
-	"time"
-
+	cachev1alpha1 "github.com/cloud/memcached-operator/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"reflect"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-
-	cachev1alpha1 "github.com/cloud/memcached-operator/api/v1alpha1"
+	"strconv"
+	"strings"
+	"time"
 )
 
-const memcachedproxyFinalizer = "cache.example.com/finalizer"
+const memcachedproxyFinalizer = "cache.cloud.io/finalizer"
 
 // Definitions to manage status conditions
 const (
@@ -62,9 +62,9 @@ type MemcachedProxyReconciler struct {
 // when the command <make manifests> is executed.
 // To know more about markers see: https://book.kubebuilder.io/reference/markers.html
 
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=cache.example.com,resources=memcacheds/finalizers,verbs=update
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=cache.cloud.io,resources=memcacheds/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;watch
@@ -191,7 +191,11 @@ func (r *MemcachedProxyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		}
 		return ctrl.Result{}, nil
 	}
+	// check memcached svc
+	if getMemcachedPodName(memcachedproxy) == "" {
+		return ctrl.Result{RequeueAfter: time.Second * 10}, nil
 
+	}
 	// Check if the deployment already exists, if not create a new one
 	found := &appsv1.Deployment{}
 	err = r.Get(ctx, types.NamespacedName{Name: memcachedproxy.Name, Namespace: memcachedproxy.Namespace}, found)
@@ -225,7 +229,7 @@ func (r *MemcachedProxyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		// Deployment created successfully
 		// We will requeue the reconciliation so that we can ensure the state
 		// and move forward for the next operations
-		return ctrl.Result{RequeueAfter: time.Minute}, nil
+		return ctrl.Result{}, nil
 	} else if err != nil {
 		log.Error(err, "Failed to get Deployment")
 		// Let's return the error for the reconciliation be re-trigged again
@@ -236,9 +240,20 @@ func (r *MemcachedProxyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	// to set the quantity of Deployment instances is the desired state on the cluster.
 	// Therefore, the following code will ensure the Deployment size is the same as defined
 	// via the Size spec of the Custom Resource which we are reconciling.
+	// 比较 spec.template 下的内容
+	dep, _ := r.deploymentForMemcachedProxy(memcachedproxy)
+	depTemplate := dep.Spec.Template.Spec.Containers[0].Args
+	foundTemplateJSON, _ := json.Marshal(found.Spec.Template.Spec.Containers[0].Args)
+	expectedTemplateJSON, _ := json.Marshal(&depTemplate)
+
 	size := memcachedproxy.Spec.Size
-	if *found.Spec.Replicas != size {
-		found.Spec.Replicas = &size
+	if *found.Spec.Replicas != size || !reflect.DeepEqual(foundTemplateJSON, expectedTemplateJSON) {
+		if *found.Spec.Replicas != size {
+			found.Spec.Replicas = &size
+		}
+		if !reflect.DeepEqual(foundTemplateJSON, expectedTemplateJSON) {
+			found.Spec.Template = dep.Spec.Template
+		}
 		if err = r.Update(ctx, found); err != nil {
 			log.Error(err, "Failed to update Deployment",
 				"Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
@@ -324,7 +339,8 @@ func (r *MemcachedProxyReconciler) doFinalizerOperationsForMemcachedProxy(cr *ca
 // deploymentForMemcachedProxy returns a Memcached Deployment object
 func (r *MemcachedProxyReconciler) deploymentForMemcachedProxy(
 	memcachedproxy *cachev1alpha1.MemcachedProxy) (*appsv1.Deployment, error) {
-	ls := labelsForMemcachedProxy(memcachedproxy, memcachedproxy.Name)
+	ls := mergeLabels(labelsForMemcachedProxy(memcachedproxy, memcachedproxy.Name), memcachedproxy.Spec.Labels)
+
 	replicas := memcachedproxy.Spec.Size
 
 	// Get the Operand image
@@ -335,8 +351,10 @@ func (r *MemcachedProxyReconciler) deploymentForMemcachedProxy(
 
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      memcachedproxy.Name,
-			Namespace: memcachedproxy.Namespace,
+			Name:        memcachedproxy.Name,
+			Namespace:   memcachedproxy.Namespace,
+			Labels:      ls,
+			Annotations: memcachedproxy.Spec.Annotations,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -348,61 +366,21 @@ func (r *MemcachedProxyReconciler) deploymentForMemcachedProxy(
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
-					// TODO(user): Uncomment the following code to configure the nodeAffinity expression
-					// according to the platforms which are supported by your solution. It is considered
-					// best practice to support multiple architectures. build your manager image using the
-					// makefile target docker-buildx. Also, you can use docker manifest inspect <image>
-					// to check what are the platforms supported.
-					// More info: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#node-affinity
-					//Affinity: &corev1.Affinity{
-					//	NodeAffinity: &corev1.NodeAffinity{
-					//		RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
-					//			NodeSelectorTerms: []corev1.NodeSelectorTerm{
-					//				{
-					//					MatchExpressions: []corev1.NodeSelectorRequirement{
-					//						{
-					//							Key:      "kubernetes.io/arch",
-					//							Operator: "In",
-					//							Values:   []string{"amd64", "arm64", "ppc64le", "s390x"},
-					//						},
-					//						{
-					//							Key:      "kubernetes.io/os",
-					//							Operator: "In",
-					//							Values:   []string{"linux"},
-					//						},
-					//					},
-					//				},
-					//			},
-					//		},
-					//	},
-					//},
-					//SecurityContext: &corev1.PodSecurityContext{
-					//	RunAsNonRoot: &[]bool{true}[0],
-					//	SeccompProfile: &corev1.SeccompProfile{
-					//		Type: corev1.SeccompProfileTypeRuntimeDefault,
-					//	},
-					//},
+
+					Affinity:    memcachedproxy.Spec.Affinity,
+					Tolerations: memcachedproxy.Spec.Tolerations,
 					Containers: []corev1.Container{{
-						Image:           image,
+						Resources: *memcachedproxy.Spec.Resources,
+						Image:     image,
+						Env:       memcachedproxy.Spec.Env, // 添加可配置的 Env 参数
+
 						Name:            "memcachedproxy",
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						// Ensure restrictive context for the container
-						// More info: https://kubernetes.io/docs/concepts/security/pod-security-standards/#restricted
-						//SecurityContext: &corev1.SecurityContext{
-						//	RunAsNonRoot: &[]bool{true}[0],
-						//	RunAsUser:                &[]int64{1001}[0],
-						//	AllowPrivilegeEscalation: &[]bool{false}[0],
-						//	Capabilities: &corev1.Capabilities{
-						//		Drop: []corev1.Capability{
-						//			"ALL",
-						//		},
-						//	},
-						//},
+
 						Ports: []corev1.ContainerPort{{
 							ContainerPort: memcachedproxy.Spec.ContainerPort,
 							Name:          "memcachedproxy",
 						}},
-						//Command: []string{"mcrouter", "-m=64", "-o", "modern", "-v"},
 						Command: []string{"mcrouter"},
 						Args: []string{
 							"-p", fmt.Sprint(memcachedproxy.Spec.ContainerPort),
@@ -428,13 +406,17 @@ func getMemcachedPodName(memcachedproxy *cachev1alpha1.MemcachedProxy) string {
 	gvr := schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
 
 	// 获取指定命名空间和名称的 StatefulSet
-	sts, _ := generateK8sDynamicClient().Resource(gvr).Namespace(memcachedproxy.Namespace).Get(context.TODO(), memcachedService, metav1.GetOptions{})
-
+	sts, err := generateK8sDynamicClient().Resource(gvr).Namespace(memcachedproxy.Namespace).Get(context.TODO(), memcachedService, metav1.GetOptions{})
+	if err != nil {
+		log.Log.Info("Failed to get sts")
+		return ""
+	}
 	// 提取服务名称
 	serviceName, _, err := unstructured.NestedString(sts.Object, "spec", "serviceName")
 	//unreadyServiceName := serviceName + "-unready"
 	if err != nil {
 		log.Log.Info("failed to get replicas: %v", err)
+		return ""
 	}
 	// 提取副本数
 	replicas, _, _ := unstructured.NestedInt64(sts.Object, "spec", "replicas")

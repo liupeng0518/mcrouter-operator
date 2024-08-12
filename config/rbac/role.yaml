@@ -29,7 +29,7 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.example.com
+  - cache.cloud.io
   resources:
   - memcacheds
   verbs:
@@ -41,13 +41,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.example.com
+  - cache.cloud.io
   resources:
   - memcacheds/finalizers
   verbs:
   - update
 - apiGroups:
-  - cache.example.com
+  - cache.cloud.io
   resources:
   - memcacheds/status
   verbs:

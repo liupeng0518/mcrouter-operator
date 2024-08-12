@@ -10,8 +10,68 @@ metadata:
   name: memcached-sample
 spec:
   # of Pods/Instances your Operand must have on cluster
-  size: 3
+  size: 2
+  labels:
+    environment: production
 
   containerPort: 11211
 
-  image: memcached:1.4.36-alpine
+  resources: {}
+  env:
+    - name: DEMO_GREETING
+      value: "Hello from the environment"
+    - name: DEMO_FAREWELL
+      value: "Such a sweet sorrow"
+#  image: memcached:1.6.29-alpine3.20
+  image: bitnami/memcached:1.6.15-debian-11-r10
+  storage:
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
+  livenessProbe:
+    tcpSocket:
+      port: memcached
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+    successThreshold: 1
+
+  readinessProbe:
+    tcpSocket:
+      port: memcached
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 6
+    successThreshold: 1
+
+
+
+  metricsEnabled: true
+  metricsImage: "bitnami/memcached-exporter:0.10.0-debian-11-r2"
+  metricsResources: {}
+
+  metricsLivenessProbe:
+    httpGet:
+      path: /metrics
+      port: 9150
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+
+  metricsReadinessProbe:
+    httpGet:
+      path: /metrics
+      port: 9150
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+    successThreshold: 1

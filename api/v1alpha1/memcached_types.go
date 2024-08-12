@@ -24,6 +24,21 @@ import (
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
+// Additional Volume is provided by user that is mounted on the pods
+// +k8s:deepcopy-gen=true
+type AdditionalVolume struct {
+	Volume    []corev1.Volume      `json:"volume,omitempty"`
+	MountPath []corev1.VolumeMount `json:"mountPath,omitempty"`
+}
+
+// Storage is the inteface to add pvc and pv support in memcached
+// +k8s:deepcopy-gen=true
+type Storage struct {
+	KeepAfterDelete     bool                         `json:"keepAfterDelete,omitempty"`
+	VolumeClaimTemplate corev1.PersistentVolumeClaim `json:"volumeClaimTemplate,omitempty"`
+	VolumeMount         AdditionalVolume             `json:"volumeMount,omitempty"`
+}
+
 // MemcachedSpec defines the desired state of Memcached
 type MemcachedSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
@@ -45,7 +60,34 @@ type MemcachedSpec struct {
 
 	Image string `json:"image,omitempty"`
 
-	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
+	// +kubebuilder:default:={limits: {cpu: "2000m", memory: "2Gi"}, requests: {cpu: "100m", memory: "200Mi"}}
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+	// Affinity scheduling rules to be applied on created Pods.
+	Affinity *corev1.Affinity `json:"affinity,omitempty"`
+	// Tolerations is the list of Toleration resources attached to each Pod in the memcached.
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
+
+	Storage *Storage `json:"storage,omitempty"`
+
+	// List of environment variables to set in the container.
+	// This field cannot be updated.
+	Env []corev1.EnvVar `json:"env,omitempty"`
+
+	// Annotations specifies the annotations to attach to pods the operator
+	// creates.
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	Labels map[string]string `json:"labels,omitempty"`
+
+	MetricsEnabled bool   `json:"metricsEnabled,omitempty"`
+	MetricsImage   string `json:"metricsImage,omitempty"`
+
+	LivenessProbe  *corev1.Probe `json:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+
+	MetricsLivenessProbe  *corev1.Probe                `json:"metricsLivenessProbe,omitempty"`
+	MetricsReadinessProbe *corev1.Probe                `json:"metricsReadinessProbe,omitempty"`
+	MetricsResources      *corev1.ResourceRequirements `json:"metricsResources,omitempty"`
 }
 
 // MemcachedStatus defines the observed state of Memcached
