@@ -9,9 +9,12 @@ metadata:
     app.kubernetes.io/created-by: memcached-operator
   name: memcachedproxy-sample
 spec:
-  size: 3
+  size: 1
+  labels:
+    environment: production
 
   containerPort: 5000
-  poolSetup: sharded
+  # replicated/sharded
+  poolSetup: replicated
   image: liupeng0518/mcrouter:0.41.0.20240122-2
   memcachedSts: memcached-sample

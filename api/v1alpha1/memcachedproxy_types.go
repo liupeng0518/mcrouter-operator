@@ -64,6 +64,9 @@ type MemcachedProxySpec struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 
 	Labels map[string]string `json:"labels,omitempty"`
+
+	LivenessProbe  *corev1.Probe `json:"livenessProbe,omitempty"`
+	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
 }
 
 // MemcachedProxyStatus defines the observed state of MemcachedProxy

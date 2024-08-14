@@ -456,7 +456,7 @@ func labelsForMemcached(memcached *cachev1alpha1.Memcached, name string) map[str
 	var imageTag string
 	image, err := imageForMemcached(memcached)
 	if err == nil {
-		imageTag = strings.Split(image, ":")[1]
+		imageTag = strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
 	}
 	return map[string]string{"app.kubernetes.io/name": "Memcached",
 		"app.kubernetes.io/instance":   name,

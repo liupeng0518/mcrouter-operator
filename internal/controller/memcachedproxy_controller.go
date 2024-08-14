@@ -370,9 +370,11 @@ func (r *MemcachedProxyReconciler) deploymentForMemcachedProxy(
 					Affinity:    memcachedproxy.Spec.Affinity,
 					Tolerations: memcachedproxy.Spec.Tolerations,
 					Containers: []corev1.Container{{
-						Resources: *memcachedproxy.Spec.Resources,
-						Image:     image,
-						Env:       memcachedproxy.Spec.Env, // 添加可配置的 Env 参数
+						Resources:      *memcachedproxy.Spec.Resources,
+						Image:          image,
+						LivenessProbe:  memcachedproxy.Spec.LivenessProbe,
+						ReadinessProbe: memcachedproxy.Spec.ReadinessProbe,
+						Env:            memcachedproxy.Spec.Env, // 添加可配置的 Env 参数
 
 						Name:            "memcachedproxy",
 						ImagePullPolicy: corev1.PullIfNotPresent,
@@ -442,7 +444,7 @@ func getpoolSetup(memcachedproxy *cachev1alpha1.MemcachedProxy) string {
 	if poolSetup == "sharded" {
 		return fmt.Sprintf(`{"pools":{"A":{"servers":[%s]}},"route":"PoolRoute|A"}`, memcachedPoolStr)
 	} else if poolSetup == "replicated" {
-		return fmt.Sprintf(`{"pools":{"A":{"servers":["%s"]}},"route":{"type":"OperationSelectorRoute","operation_policies":{"add":"AllSyncRoute|Pool|A","delete":"AllSyncRoute|Pool|A","get":"RandomRoute|Pool|A","set":"AllSyncRoute|Pool|A"}}`, memcachedPoolStr)
+		return fmt.Sprintf(`{"pools":{"A":{"servers":[%s]}},"route":{"type":"OperationSelectorRoute","operation_policies":{"add":"AllSyncRoute|Pool|A","delete":"AllSyncRoute|Pool|A","get":"RandomRoute|Pool|A","set":"AllSyncRoute|Pool|A"}}}`, memcachedPoolStr)
 	} else {
 
 		return ""
@@ -479,7 +481,7 @@ func labelsForMemcachedProxy(memcachedproxy *cachev1alpha1.MemcachedProxy, name 
 	var imageTag string
 	image, err := imageForMemcachedProxy(memcachedproxy)
 	if err == nil {
-		imageTag = strings.Split(image, ":")[1]
+		imageTag = strings.Split(image, ":")[len(strings.Split(image, ":"))-1]
 	}
 	return map[string]string{"app.kubernetes.io/name": "Memcached",
 		"app.kubernetes.io/instance":   name,
